@@ -12,6 +12,23 @@
 - 对评审问题进行修复或回到相关步骤重新生成。
 - 查看任务历史、实时进度和任务结果，并导出完整交付数据。
 
+## 这个项目的业务需求是什么
+
+这个仓库实现的是一个“需求分析与技术交付工作台”，而不是某个固定行业的电商、教育或审批系统。它面向需要把业务想法整理成可评审项目方案的人：用户描述想解决的问题和目标，系统把描述拆成明确的目标、用户、约束、核心功能和待确认问题，再生成 PRD、技术设计与评审意见，最后由人确认并导出。
+
+它解决的核心业务问题是：需求通常以自然语言开始，内容可能不完整；产品功能、技术方案和验收关注点容易脱节。系统用结构化产物和评审回流把这些环节连起来，让用户能补充信息、检查功能是否落到 API 和数据设计中，并在交付前进行人工审批。
+
+一个典型使用过程如下：
+
+1. 产品负责人或业务人员在“创建任务”页输入目标、预期用户、核心流程和已知限制。
+2. 需求分析 Agent 提取目标、约束、受众、功能和假设；信息不足时暂停并向用户提问。
+3. 产品方案 Agent 将确认后的需求整理为用户故事、功能模块、用户流程、非功能需求和成功指标。
+4. 技术设计 Agent 根据 PRD 提出服务划分、数据库表、API、代码骨架和技术风险。
+5. 评审 Agent 检查 PRD 与技术设计的一致性和覆盖情况；有缺口时修复或退回相应环节。
+6. 用户查看结果并批准或提出修改意见。批准后可导出 Markdown 和 JSON 交付物。
+
+因此，用户输入的业务领域可以变化；页面中的“电商”“在线教育”等文字只是便于试用的示例，不代表系统只支持这些领域。当前项目负责生成、检查和导出需求交付物，不包含账号权限、支付、实际代码自动部署等产品能力。
+
 ## 工作流程
 
 浏览器 → FastAPI API / 后台任务队列 → LangGraph 工作流 → 需求规划与评估 → PRD 和技术设计 → 质量评审与修复/回流 → 人工审批 → Markdown / JSON 交付物
@@ -46,6 +63,22 @@
 | <code>frontend-vue/src/</code> | 页面、组件、API composable、SSE 和状态管理 | 理解浏览器端流程 |
 | <code>docs/</code> | 架构、启动、模型配置、使用及技术设计说明 | 按主题深入阅读 |
 
+## 业务逻辑在哪些文件中构建
+
+这里的“业务逻辑”分成两层：前端和 API 管理“需求任务”的创建、澄清、审批与查看；Agent 工作流负责把用户描述的“被规划项目”整理成产品和技术交付内容。新增具体行业的功能时，主要沿着下面的链路修改：
+
+| 要调整的内容 | 从哪里开始 | 主要关联文件 |
+| --- | --- | --- |
+| 创建任务、输入需求和示例需求 | 页面入口与表单 | <code>frontend-vue/src/views/CreateTask.vue</code>、<code>frontend-vue/src/composables/useTaskApi.ts</code> |
+| 需求怎么被理解、拆解和追问 | 需求分析规则与结构化结果 | <code>app/core/prompts.py</code>、<code>app/agents/planner_agent.py</code>、<code>app/schemas/requirement.py</code> |
+| PRD 包含哪些业务模块和流程 | 产品方案生成及字段定义 | <code>app/agents/solution_agent.py</code>、<code>app/schemas/prd.py</code> |
+| 业务功能如何映射到服务、数据表和 API | 技术方案生成及覆盖检查 | <code>app/agents/engineer_agent.py</code>、<code>app/schemas/design.py</code>、<code>app/tools/coverage_metrics.py</code> |
+| 评审标准、问题修复和回流目标 | 质量评审与条件路由 | <code>app/agents/reviewer_agent.py</code>、<code>app/agents/repairer_agent.py</code>、<code>app/graph/router.py</code> |
+| 澄清、审批、任务状态与结果展示 | 流程编排、API 和前端详情页 | <code>app/graph/builder.py</code>、<code>app/agents/orchestrator_agent.py</code>、<code>app/api/routes_task.py</code>、<code>frontend-vue/src/views/TaskDetail.vue</code> |
+| 交付物的保存和导出格式 | 结果组装、Markdown 模板和文件导出 | <code>app/agents/orchestrator_agent.py</code>、<code>app/tools/template_tool.py</code>、<code>app/tools/export_tool.py</code> |
+
+如果要支持一个新业务领域，建议先明确该领域的角色、目标、核心功能、业务流程、约束和验收标准，再调整需求/PRD Schema 与相应 Prompt；随后让技术设计 Schema 能表达该领域需要的服务、数据和接口，最后补充评审覆盖规则与前端展示。仅修改创建页的示例文本只会改变演示内容，不会增加新的业务能力。
+
 ## 本地启动
 
 需要 Python 3.11、Node.js 20 或更高版本。以下命令在项目根目录执行；前后端分别运行在两个终端。
@@ -59,15 +92,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 cp .env.example .env
-~~~
-
-Windows PowerShell：
-
-~~~powershell
-py -3.11 -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
 ~~~
 
 编辑根目录的 <code>.env</code>，填写模型服务的 <code>OPENAI_API_KEY</code>；按服务商要求设置 <code>OPENAI_API_BASE</code> 和 <code>OPENAI_MODEL_NAME</code>。默认示例使用 DashScope 的 OpenAI 兼容接口。不要把真实密钥提交到 Git。
