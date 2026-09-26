@@ -1,247 +1,117 @@
-# 多智能体需求交付系统 (Multi-Agent Delivery System)
+# 多智能体需求交付系统
 
-基于 LangChain + LangGraph 的多 Agent 协作系统，将自然语言需求转化为完整的项目交付包。
+一个用于把自然语言需求整理成产品与技术交付物的全栈示例项目。用户提交需求后，后端通过 LangGraph 组织多个 Agent 完成需求分析、方案生成、工程设计和质量评审；遇到信息缺口或需要确认时，由用户补充或审批。Vue 前端负责任务创建、进度查看和结果浏览。
 
-## 系统概述
+> 当前项目适合源码学习、演示和二次开发。模型生成内容需要人工核对。当前版本通过 OpenAI 兼容接口连接模型；请先查看 [模型配置](docs/MODEL_CONFIGURATION.md)。
 
-本系统通过多个专业智能体的协作，实现从需求输入到技术交付的全流程自动化：
+## 项目能做什么
 
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   需求输入   │ -> │  需求澄清    │ -> │  方案设计    │ -> │  工程实现    │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
-                                                              │
-                        ┌─────────────┐    ┌─────────────┐   │
-                        │  交付打包    │ <- │  人工审批    │ <-┘
-                        └─────────────┘    └─────────────┘
-```
+- 创建需求任务，并在后台运行工作流。
+- 通过人工澄清补充缺失信息，审批或驳回交付结果。
+- 生成结构化需求、PRD、技术设计、代码骨架建议和评审报告。
+- 对评审问题进行修复或回到相关步骤重新生成。
+- 查看任务历史、实时进度和任务结果，并导出完整交付数据。
 
-## 核心特性
+## 工作流程
 
-- **多智能体协作**：Planner、Solution、Engineer、Reviewer 等专业 Agent 分工协作
-- **人机协同**：支持人工澄清和审批节点，确保交付质量
-- **状态驱动**：基于 LangGraph 的状态机工作流，支持断点续传
-- **全流程交付**：输出需求澄清文档、PRD、技术设计、代码骨架和评审报告
+浏览器 → FastAPI API / 后台任务队列 → LangGraph 工作流 → 需求规划与评估 → PRD 和技术设计 → 质量评审与修复/回流 → 人工审批 → Markdown / JSON 交付物
 
-## 技术栈
+1. Planner 解析需求并识别需要补充的信息；Plan Evaluator 决定继续还是进入人工澄清。
+2. Solution 生成 PRD，Engineer 生成技术设计和代码骨架建议。
+3. Reviewer 检查交付内容；需要修改时由 Repairer 修复，或按问题类型回到方案/工程步骤。
+4. 系统等待人工审批。审批通过后导出交付物；用户反馈会从持久化工作流检查点恢复执行。
 
-| 组件 | 技术 |
-|------|------|
-| 智能体框架 | LangChain + LangGraph |
-| LLM 接口 | OpenAI API |
-| 后端服务 | FastAPI + Uvicorn |
-| 前端界面 | Vue 3 + TypeScript + Vite |
-| 数据存储 | SQLite + SQLAlchemy |
-| 向量存储 | ChromaDB |
+## 技术组成
 
-## 快速开始
+| 部分 | 技术与职责 |
+| --- | --- |
+| 前端 | Vue 3、TypeScript、Vite；创建任务、历史、进度和交付物页面 |
+| API | FastAPI；任务创建、查询、反馈、结果和 SSE 进度流 |
+| 工作流 | LangGraph；Agent 节点、状态传递、人工中断、评审回流和恢复 |
+| 模型 | LangChain OpenAI 接口；连接 OpenAI 兼容服务 |
+| 持久化 | SQLite、SQLAlchemy、LangGraph SQLite checkpoint；任务及中断状态 |
+| 检索记忆 | ChromaDB；可选记忆能力，默认关闭 |
 
-### 1. 环境准备
+## 目录导航
 
-```bash
-# 克隆项目
-git clone <repository-url>
-cd mutil_agent_v1
+| 路径 | 内容 | 建议何时阅读 |
+| --- | --- | --- |
+| <code>app/main.py</code> | FastAPI 应用入口、数据库初始化和后台 worker 生命周期 | 从这里了解后端如何启动 |
+| <code>app/api/</code> | 任务 REST API 和 SSE 进度流 | 查找前后端接口 |
+| <code>app/graph/</code> | 工作流状态、节点构建、路由和 checkpoint | 理解完整执行顺序 |
+| <code>app/agents/</code> | Planner、Solution、Engineer、Reviewer 等 Agent | 查看每一步如何生成内容 |
+| <code>app/schemas/</code> | 需求、PRD、技术设计和评审的数据模型 | 查找结构化输入与输出 |
+| <code>app/core/</code> | 环境配置、模型接入、提示词、任务队列和日志 | 修改模型或运行配置 |
+| <code>app/storage/</code>、<code>app/tools/</code> | 数据访问、记忆存储、工具和结果导出 | 追踪数据如何保存与导出 |
+| <code>frontend-vue/src/</code> | 页面、组件、API composable、SSE 和状态管理 | 理解浏览器端流程 |
+| <code>docs/</code> | 架构、启动、模型配置、使用及技术设计说明 | 按主题深入阅读 |
 
-# 创建虚拟环境
-conda create -n multi-agent python=3.11
-conda activate multi-agent
+## 本地启动
 
-# 安装依赖
-pip install -r requirements.txt
-```
+需要 Python 3.11、Node.js 20 或更高版本。以下命令在项目根目录执行；前后端分别运行在两个终端。
 
-### 2. 配置环境变量
+### 1. 配置后端
 
-复制 `.env.example` 为 `.env`，并填写您的配置：
+macOS / Linux：
 
-```bash
+~~~bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 cp .env.example .env
-```
+~~~
 
-编辑 `.env` 文件：
+Windows PowerShell：
 
-```env
-# LLM Configuration (必填)
-OPENAI_API_KEY=your-api-key-here
-OPENAI_API_BASE=https://api.openai.com/v1
-OPENAI_MODEL_NAME=gpt-4o
+~~~powershell
+py -3.11 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+~~~
 
-# LangSmith (可选)
-LANGCHAIN_TRACING_V2=false
-LANGCHAIN_API_KEY=
-LANGCHAIN_PROJECT=multi-agent-v1
+编辑根目录的 <code>.env</code>，填写模型服务的 <code>OPENAI_API_KEY</code>；按服务商要求设置 <code>OPENAI_API_BASE</code> 和 <code>OPENAI_MODEL_NAME</code>。默认示例使用 DashScope 的 OpenAI 兼容接口。不要把真实密钥提交到 Git。
 
-# Database
-DATABASE_URL=sqlite+aiosqlite:///./data/tasks.db
+在第一个终端启动后端：
 
-# App
-APP_ENV=development
-LOG_LEVEL=INFO
-MAX_REFLOW_COUNT=2
-```
+~~~bash
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+~~~
 
-### 3. 启动服务（任选一种）
+### 2. 启动前端
 
-**方式一：本地开发启动（适合调试、截图和二次开发）**
+在第二个终端，从项目根目录执行：
 
-```bash
-# 终端 1：启动 FastAPI 后端
-start.bat backend
+~~~bash
+cd frontend-vue
+npm ci
+npm run dev
+~~~
 
-# 终端 2：启动 Vue 前端
-start.bat frontend
-```
+打开 Vite 输出的本地地址（通常为 <code>http://127.0.0.1:5173</code>）。前端开发服务器会将 API 请求代理到本地 FastAPI 服务。
 
-前端地址：`http://127.0.0.1:5173`。
+## 常用地址与接口
 
-**方式二：Docker 启动（适合环境隔离和快速部署）**
+- 前端：<code>http://127.0.0.1:5173</code>
+- 后端健康检查：<code>http://127.0.0.1:8000/health</code>
+- FastAPI 接口文档：<code>http://127.0.0.1:8000/docs</code>
+- 任务接口：<code>POST /tasks</code> 创建、<code>GET /tasks</code> 列表、<code>GET /tasks/{task_id}</code> 查询
+- 人工反馈：<code>POST /tasks/{task_id}/feedback</code>
+- 已完成任务结果：<code>GET /tasks/{task_id}/result</code>
+- 实时进度：由 SSE 路由提供，具体路径见 <code>app/api/routes_stream.py</code>
 
-```bash
-start.bat docker
-```
+## 配置、数据与交付结果
 
-前端地址：`http://127.0.0.1:8080`。
+- <code>.env.example</code> 是配置模板；本机真实配置保存在忽略文件 <code>.env</code> 中。
+- SQLite 任务数据、LangGraph checkpoint、可选记忆数据位于 <code>data/</code>。
+- 每个任务导出的文件位于 <code>output/{task_id}/</code>，并可通过结果 API 获取完整 JSON 数据。
+- 默认关闭长期记忆；相关配置与当前支持的模型接口见 [模型配置说明](docs/MODEL_CONFIGURATION.md)。
 
-详细准备步骤与故障排查见 [安装部署指南](docs/安装部署指南.md)。
+## 文档阅读顺序
 
-### 4. 访问系统
-
-- **本地开发前端**：http://localhost:5173
-- **Docker 前端**：http://localhost:8080
-- **API 文档**：http://localhost:8000/docs
-- **健康检查**：http://localhost:8000/health
-
-## 项目结构
-
-```
-mutil_agent_v1/
-├── app/
-│   ├── agents/           # 智能体实现
-│   │   ├── orchestrator_agent.py   # 编排器：输入规范化、人工交互、打包
-│   │   ├── planner_agent.py        # 规划器：需求澄清与结构化
-│   │   ├── solution_agent.py       # 方案师：PRD 与技术方案
-│   │   ├── engineer_agent.py       # 工程师：代码骨架生成
-│   │   └── reviewer_agent.py       # 评审员：质量检查
-│   ├── api/              # API 路由
-│   │   └── routes_task.py          # 任务管理接口
-│   ├── core/             # 核心组件
-│   │   ├── config.py               # 配置管理
-│   │   ├── llm.py                  # LLM 封装
-│   │   ├── logger.py               # 日志配置
-│   │   └── prompts.py              # Prompt 模板
-│   ├── graph/            # 工作流图
-│   │   ├── builder.py              # 图构建器
-│   │   ├── checkpoints.py          # 状态检查点
-│   │   ├── router.py               # 路由逻辑
-│   │   └── state.py                # 状态定义
-│   ├── schemas/          # 数据模型
-│   ├── storage/          # 数据存储
-│   ├── tools/            # 工具函数
-│   └── main.py           # FastAPI 入口
-├── frontend-vue/         # Vue 前端
-├── data/                 # 数据目录
-├── output/               # 交付物输出目录
-├── tests/                # 测试用例
-├── requirements.txt      # 依赖列表
-└── start.bat             # Windows 启动脚本
-```
-
-## 工作流说明
-
-系统采用 LangGraph 构建的工作流，包含以下节点：
-
-| 节点 | 职责 | 说明 |
-|------|------|------|
-| input_normalize | 输入规范化 | 清理和标准化用户输入 |
-| planner | 需求规划 | 分析需求，识别待澄清问题 |
-| human_clarification | 人工澄清 | 需求不明确时暂停等待用户补充 |
-| solution | 方案设计 | 生成 PRD 和技术设计方案 |
-| engineer | 工程实现 | 生成代码骨架和项目结构 |
-| reviewer | 质量评审 | 检查交付物质量，决定是否回流 |
-| human_approval | 人工审批 | 人工确认后进入打包阶段 |
-| package_output | 交付打包 | 汇总所有产物生成最终交付包 |
-
-### 回流机制
-
-当 Reviewer 发现质量问题时，系统支持回流到上游节点重新处理：
-
-- **最大回流次数**：可通过 `MAX_REFLOW_COUNT` 配置（默认 2 次）
-- **回流目标**：根据问题类型回流到 Solution 或 Engineer 节点
-
-## API 接口
-
-### 创建任务
-
-```bash
-POST /tasks
-Content-Type: application/json
-
-{
-  "user_input": "我想开发一个在线教育平台..."
-}
-```
-
-### 查询任务状态
-
-```bash
-GET /tasks/{task_id}
-```
-
-### 提交人工反馈
-
-```bash
-POST /tasks/{task_id}/feedback
-Content-Type: application/json
-
-{
-  "feedback": "补充信息...",
-  "approved": true
-}
-```
-
-### 获取交付结果
-
-```bash
-GET /tasks/{task_id}/result
-```
-
-## 交付物说明
-
-任务完成后，系统会在 `output/{task_id}/` 目录下生成以下交付物：
-
-| 文件 | 说明 |
-|------|------|
-| `requirement_*.json` | 结构化需求文档 |
-| `prd_*.md` | 产品需求文档 (PRD) |
-| `technical_design_*.md` | 技术设计方案 |
-| `review_report_*.md` | 评审报告 |
-| `full_deliverable_*.json` | 完整交付包（JSON 格式） |
-
-## 开发指南
-
-### 运行测试
-
-```bash
-pytest tests/ -v
-```
-
-### 代码规范
-
-- 使用 Python 3.11+
-- 遵循 PEP 8 规范
-- 类型注解：使用 `from __future__ import annotations`
-
-## 许可证
-
-当前发布包未授予开源、商业或独家授权。发布者须先确认全部源码与素材的权属，再由实际权利人替换 [授权与权属说明](LICENSE.md) 为适用的许可证或订单授权条款。详情见 [授权与销售说明](docs/授权与销售说明.md)。
-
-## 贡献指南
-
-欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送分支 (`git push origin feature/AmazingFeature`)
-5. 创建 Pull Request
+1. [启动说明](docs/STARTUP.md)：安装依赖和启动服务。
+2. [项目架构](docs/PROJECT_ARCHITECTURE.md)：模块边界、数据流和部署结构。
+3. [总体设计](docs/SYSTEM_DESIGN.md)：工作流、状态和扩展点。
+4. [模型配置](docs/MODEL_CONFIGURATION.md)：环境变量与模型服务设置。
+5. [使用说明](docs/USAGE.md)：页面操作和交付结果。
+6. [技术方案](docs/TECHNICAL_SOLUTION.md)：设计细节。

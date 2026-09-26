@@ -1,120 +1,50 @@
 # 模型接入配置
 
-## 1. 配置文件
+## 当前支持方式
 
-在项目根目录将 `.env.example` 复制为 `.env`，所有模型配置均在 `.env` 中完成。交付包不包含 `.env`，认证凭据字段保持为空，使用者需填写自己的服务信息。
+当前跟踪的运行实现使用 LangChain 的 OpenAI Chat Completions 客户端，通过 OpenAI 兼容接口调用模型。它支持 OpenAI 服务以及实现兼容接口的第三方服务；仓库中没有接入独立的 Anthropic、Gemini、Azure 或 Ollama Provider。
 
-通用配置项：
+首次启动前，在项目根目录复制 `.env.example` 为 `.env`，然后设置以下变量：
 
-```dotenv
-LLM_PROVIDER=openai_compatible
-LLM_API_KEY=
-LLM_API_BASE=https://provider.example.com/v1
-LLM_MODEL_NAME=provider-model-name
-LLM_TIMEOUT_SECONDS=180
-LLM_MAX_RETRIES=2
+~~~dotenv
+OPENAI_API_KEY=your-api-key
+OPENAI_API_BASE=https://provider.example.com/v1
+OPENAI_MODEL_NAME=provider-model-name
+OPENAI_TIMEOUT_SECONDS=180
 STRUCTURED_OUTPUT_METHOD=function_calling
-```
+~~~
 
-| 配置项 | 说明 |
+| 变量 | 用途 |
 | --- | --- |
-| `LLM_PROVIDER` | 模型服务类型 |
-| `LLM_API_KEY` | 使用者自己的认证凭据，交付包内为空 |
-| `LLM_API_BASE` | 模型服务接口地址 |
-| `LLM_MODEL_NAME` | 服务商提供的模型名称或部署名称 |
-| `LLM_TIMEOUT_SECONDS` | 单次请求超时时间 |
-| `LLM_MAX_RETRIES` | 请求失败后的最大重试次数 |
-| `STRUCTURED_OUTPUT_METHOD` | 结构化输出方式 |
+| `OPENAI_API_KEY` | 模型服务认证密钥 |
+| `OPENAI_API_BASE` | OpenAI 兼容 API 的 Base URL |
+| `OPENAI_MODEL_NAME` | 服务商提供的模型名 |
+| `OPENAI_TIMEOUT_SECONDS` | 请求超时时间，默认 180 秒 |
+| `STRUCTURED_OUTPUT_METHOD` | LangChain 结构化输出方式，默认 `function_calling` |
 
-## 2. OpenAI-compatible
+默认模板使用 DashScope OpenAI 兼容接口和 `qwen-max`。如果改用其他服务，请按其文档填写 Base URL、模型名称和 API Key。不要提交真实的 `.env` 文件或将密钥写入源码。
 
-适用于提供 OpenAI Chat Completions 兼容接口的模型服务。接口地址和模型名称以服务商控制台为准。
+## LangSmith（可选）
 
-```dotenv
-LLM_PROVIDER=openai_compatible
-LLM_API_BASE=https://provider.example.com/v1
-LLM_MODEL_NAME=provider-model-name
-STRUCTURED_OUTPUT_METHOD=function_calling
-```
+需要追踪模型调用时，可配置：
 
-## 3. OpenAI
+~~~dotenv
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your-langsmith-api-key
+LANGCHAIN_PROJECT=multi-agent-v1
+~~~
 
-```dotenv
-LLM_PROVIDER=openai
-LLM_API_BASE=
-LLM_MODEL_NAME=gpt-4.1
-STRUCTURED_OUTPUT_METHOD=function_calling
-```
+不用 LangSmith 时保持模板中的 `LANGCHAIN_TRACING_V2=false`。
 
-## 4. Azure OpenAI
+## 记忆能力
 
-`LLM_API_BASE` 填写 Azure endpoint，`LLM_MODEL_NAME` 填写 deployment name。
+记忆检索由 `MEMORY_ENABLED` 控制，模板默认关闭。启用前请确认已配置所需模型能力和本地存储依赖。Embedding 模型名由 `MEMORY_EMBEDDING_MODEL` 提供；远程 Embedding 不可用时实现会回退至本地 Hash 向量。
 
-```dotenv
-LLM_PROVIDER=azure_openai
-LLM_API_BASE=https://resource-name.openai.azure.com
-LLM_MODEL_NAME=deployment-name
-AZURE_OPENAI_API_VERSION=2024-10-21
-```
+其他流程开关包括 `DIALOGUE_ENABLED`、`PLAN_VARIANTS_ENABLED`、`REPAIRER_ENABLED` 和 `SELF_REFINE_ENABLED`。未显式设置的配置项会使用 `app/core/config.py` 中定义的默认值。
 
-## 5. Anthropic Claude
+## 排查提示
 
-```dotenv
-LLM_PROVIDER=anthropic
-LLM_API_BASE=
-LLM_MODEL_NAME=claude-model-name
-```
-
-## 6. Google Gemini
-
-```dotenv
-LLM_PROVIDER=gemini
-LLM_API_BASE=
-LLM_MODEL_NAME=gemini-model-name
-```
-
-## 7. Ollama
-
-本地运行时使用 Ollama 服务地址；模型需提前在 Ollama 中准备完成。
-
-```dotenv
-LLM_PROVIDER=ollama
-LLM_API_BASE=http://127.0.0.1:11434
-LLM_MODEL_NAME=local-model-name
-```
-
-Docker 容器访问 Windows 宿主机上的 Ollama 时，可将地址改为 `http://host.docker.internal:11434`。
-
-## 8. 模型能力要求
-
-| Provider | 结构化输出 | Tool Calling |
-| --- | --- | --- |
-| OpenAI-compatible | 取决于服务商和具体模型 | 取决于服务商和具体模型 |
-| OpenAI | 支持 | 支持 |
-| Azure OpenAI | 支持 | 取决于部署模型 |
-| Anthropic | 支持 | 取决于具体模型 |
-| Gemini | 支持 | 取决于具体模型 |
-| Ollama | 取决于本地模型 | 取决于本地模型 |
-
-核心流程要求模型能够稳定返回结构化内容。启用记忆检索功能时，所选模型还应支持 Tool Calling。
-
-## 9. 记忆检索配置
-
-默认关闭远程记忆增强，不影响任务主流程：
-
-```dotenv
-MEMORY_ENABLED=false
-MEMORY_EMBEDDING_PROVIDER=auto
-MEMORY_EMBEDDING_MODEL=text-embedding-v3
-```
-
-设置为 `auto` 时，OpenAI/OpenAI-compatible 服务会尝试使用远程 Embedding；其他 Provider 自动使用本地 Hash 方式。设置 `MEMORY_EMBEDDING_PROVIDER=hash` 可完全使用本地方式。
-
-## 10. 常见问题
-
-- 返回 `401/403`：检查认证凭据、账号权限和接口地址。
-- 返回 `404 model not found`：检查模型名称、部署名称和接口地址。
-- 结构化输出失败：确认具体模型支持结构化输出，并检查 `STRUCTURED_OUTPUT_METHOD`。
-- Tool Calling 无结果：换用明确支持工具调用的模型，或保持记忆增强功能关闭。
-- Ollama 无法连接：确认 Ollama 已启动，并检查本地与 Docker 环境的访问地址。
-- 修改 `.env` 后配置未生效：完整重启后端服务。
+- `401/403`：检查 Key、账号权限和服务端授权。
+- `404`：检查 API Base URL 和模型名称。
+- 结构化输出失败：检查服务商是否支持所选输出方法，并尝试其兼容模式。
+- 修改 `.env` 后配置未变化：重启后端进程。
